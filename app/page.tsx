@@ -155,7 +155,7 @@ const ImageResizeTool = () => {
     setIsOptimizing(false);
   };
 
-  const toDataUrlWebp = async (file) => {
+  const toDataUrlWebp = async (file: Blob | MediaSource) => {
     const img = document.createElement("img");
     img.src = URL.createObjectURL(file);
 
@@ -190,10 +190,12 @@ const ImageResizeTool = () => {
     const x = (width - drawWidth) / 2;
     const y = (height - drawHeight) / 2;
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, width, height);
+    if (ctx) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, width, height);
 
-    ctx.drawImage(img, x, y, drawWidth, drawHeight);
+      ctx.drawImage(img, x, y, drawWidth, drawHeight);
+    }
 
     return canvas.toDataURL("image/webp", {
       quality: isLossless ? 1 : quality,
