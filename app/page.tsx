@@ -3,6 +3,13 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -40,7 +47,7 @@ interface CompressionOptions {
   maxWidthOrHeight: number;
   useWebWorker: true;
   initialQuality: number;
-  fileType: "image/webp";
+  fileType: string;
   options: {
     lossless: boolean;
   };
@@ -55,6 +62,7 @@ const ImageResizeTool = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [quality, setQuality] = useState<number>(0.9);
   const [isLossless, setIsLossless] = useState(false);
+  const [fileFormat, setFileFormat] = useState<string>("image/webp");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleButtonClick = () => {
@@ -129,24 +137,24 @@ const ImageResizeTool = () => {
           maxWidthOrHeight: Math.max(width, height),
           useWebWorker: true,
           initialQuality: isLossless ? 1 : quality,
-          fileType: "image/webp",
+          fileType: fileFormat,
           options: {
             lossless: isLossless,
           },
         };
         const compressedFile = await imageCompression(file, options);
-        const webpDataUrl = await toDataUrlWebp(compressedFile);
+        const dataUrl = await toDataUrlWebp(compressedFile);
 
-        const size =
-          compressedFile.size < 1024 * 1024
-            ? `${(compressedFile.size / 1024).toFixed(1)} KB`
-            : `${(compressedFile.size / (1024 * 1024)).toFixed(1)} MB`;
+        const extension = fileFormat.split("/")[1];
 
         return {
-          dataUrl: webpDataUrl,
-          fileName: file.name.replace(/\.[^/.]+$/, "") + ".webp",
+          dataUrl,
+          fileName: file.name.replace(/\.[^/.]+$/, "") + "." + extension,
           dimensions: { width, height },
-          size,
+          size:
+            compressedFile.size < 1024 * 1024
+              ? `${(compressedFile.size / 1024).toFixed(1)} KB`
+              : `${(compressedFile.size / (1024 * 1024)).toFixed(1)} MB`,
         };
       })
     );
@@ -262,6 +270,19 @@ const ImageResizeTool = () => {
               onChange={(e) => setHeight(Number(e.target.value))}
               min="1"
             />
+          </div>
+          <div className="flex-1 space-y-2">
+            <label className="text-sm font-medium">Format</label>
+            <Select value={fileFormat} onValueChange={setFileFormat}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select format" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="image/webp">WebP</SelectItem>
+                <SelectItem value="image/jpeg">JPEG</SelectItem>
+                <SelectItem value="image/png">PNG</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex-1 space-y-2">
             <div className="flex justify-between items-center">
