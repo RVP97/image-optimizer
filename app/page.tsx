@@ -1,17 +1,9 @@
 "use client";
 
 import imageCompression from "browser-image-compression";
-import {
-  Download,
-  ImageIcon,
-  Loader2,
-  SlidersHorizontal,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { Download, ImageIcon, Loader2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -356,414 +348,392 @@ const ImageResizeTool = () => {
   const imageCount = gallery.length;
 
   return (
-    <main className="isolate min-h-dvh bg-linear-to-b from-zinc-100 via-background to-background dark:from-zinc-950 dark:via-background dark:to-background">
-      <div className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
-        <div className="mx-auto max-w-6xl">
-          <header className="mb-10 lg:mb-14">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary ring-1 ring-primary/15">
-                <Sparkles className="size-3.5" aria-hidden />
-                Runs in your browser
-              </span>
-            </div>
-            <h1 className="mt-5 max-w-[35ch] text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-              Compress images without uploading them
-            </h1>
-            <p className="mt-4 max-w-[56ch] text-base text-pretty text-muted-foreground sm:text-lg">
-              Resize, convert, and shrink files locally. Pick a format, tune
-              quality, and download—nothing leaves your device.
+    <main className="isolate min-h-dvh bg-background">
+      <div className="border-b border-foreground/6">
+        <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-12">
+          <div className="max-w-2xl">
+            <p className="text-sm text-pretty text-muted-foreground">
+              Local · no upload
             </p>
-          </header>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+              Image optimizer
+            </h1>
+            <p className="mt-4 text-base text-pretty text-muted-foreground sm:text-lg">
+              Resize, convert, compress, and scale up in the browser. Your files
+              never leave this device.
+            </p>
+          </div>
+        </div>
+      </div>
 
-          <div className="grid gap-8 lg:grid-cols-12 lg:items-start lg:gap-10">
-            <aside className="flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-              <div className="rounded-2xl bg-card/90 p-6 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-card/80 dark:ring-white/10">
-                <div className="flex items-center gap-2 text-foreground">
-                  <SlidersHorizontal
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <h2 className="text-base font-semibold">Output settings</h2>
-                </div>
-                <p className="mt-1 text-sm text-pretty text-muted-foreground">
-                  These apply to every image in your batch.
-                </p>
+      <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-12">
+        <div className="grid gap-12 lg:grid-cols-[minmax(0,17.5rem)_1fr] lg:gap-16 xl:grid-cols-[minmax(0,19rem)_1fr]">
+          <aside className="min-w-0 lg:border-r lg:border-foreground/6 lg:pr-10 xl:pr-14">
+            <div className="lg:sticky lg:top-8">
+              <h2 className="text-sm font-semibold text-foreground">
+                Settings
+              </h2>
+              <p className="mt-2 text-sm text-pretty text-muted-foreground">
+                Applied to each file in the queue.
+              </p>
 
-                <div className="mt-6 flex flex-col gap-8">
-                  <div className="flex flex-col gap-3">
-                    <div className="text-sm font-medium text-foreground">
-                      Canvas size
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="width"
-                          className="text-sm text-muted-foreground"
-                        >
-                          Width
-                        </label>
-                        <Input
-                          id="width"
-                          name="width"
-                          type="number"
-                          inputMode="numeric"
-                          value={width}
-                          onChange={(e) => setWidth(Number(e.target.value))}
-                          min={1}
-                          disabled={preserveOriginalDimensions}
-                          className={cn(
-                            "tabular-nums",
-                            preserveOriginalDimensions && "opacity-60",
-                          )}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label
-                          htmlFor="height"
-                          className="text-sm text-muted-foreground"
-                        >
-                          Height
-                        </label>
-                        <Input
-                          id="height"
-                          name="height"
-                          type="number"
-                          inputMode="numeric"
-                          value={height}
-                          onChange={(e) => setHeight(Number(e.target.value))}
-                          min={1}
-                          disabled={preserveOriginalDimensions}
-                          className={cn(
-                            "tabular-nums",
-                            preserveOriginalDimensions && "opacity-60",
-                          )}
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-pretty text-muted-foreground">
-                      Used when preserve original size is off. Units are pixels.
-                    </p>
-                  </div>
-
-                  <div className="h-px bg-black/5 dark:bg-white/10" />
-
-                  <div className="flex flex-col gap-3">
-                    <div className="text-sm font-medium text-foreground">
-                      File format
-                    </div>
-                    <label htmlFor="file-format" className="sr-only">
-                      Output format
-                    </label>
-                    <Select value={fileFormat} onValueChange={setFileFormat}>
-                      <SelectTrigger id="file-format" className="w-full">
-                        <SelectValue placeholder="Select format" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="image/webp">WebP</SelectItem>
-                        <SelectItem value="image/jpeg">JPEG</SelectItem>
-                        <SelectItem value="image/png">PNG</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="mt-8 flex flex-col gap-0 divide-y divide-foreground/6">
+                <section className="flex flex-col gap-4 pb-8">
+                  <h3 className="text-sm font-medium text-foreground">
+                    Target frame
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-2">
                       <label
-                        htmlFor="quality"
+                        htmlFor="width"
+                        className="text-sm text-muted-foreground"
+                      >
+                        Width
+                      </label>
+                      <Input
+                        id="width"
+                        name="width"
+                        type="number"
+                        inputMode="numeric"
+                        value={width}
+                        onChange={(e) => setWidth(Number(e.target.value))}
+                        min={1}
+                        disabled={preserveOriginalDimensions}
+                        className={cn(
+                          "tabular-nums",
+                          preserveOriginalDimensions && "opacity-50",
+                        )}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label
+                        htmlFor="height"
+                        className="text-sm text-muted-foreground"
+                      >
+                        Height
+                      </label>
+                      <Input
+                        id="height"
+                        name="height"
+                        type="number"
+                        inputMode="numeric"
+                        value={height}
+                        onChange={(e) => setHeight(Number(e.target.value))}
+                        min={1}
+                        disabled={preserveOriginalDimensions}
+                        className={cn(
+                          "tabular-nums",
+                          preserveOriginalDimensions && "opacity-50",
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-sm text-pretty text-muted-foreground">
+                    Pixels. Ignored when preserve dimensions is on.
+                  </p>
+                </section>
+
+                <section className="flex flex-col gap-4 py-8">
+                  <h3 className="text-sm font-medium text-foreground">
+                    Format
+                  </h3>
+                  <label htmlFor="file-format" className="sr-only">
+                    Output format
+                  </label>
+                  <Select value={fileFormat} onValueChange={setFileFormat}>
+                    <SelectTrigger id="file-format" className="w-full">
+                      <SelectValue placeholder="Format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="image/webp">WebP</SelectItem>
+                      <SelectItem value="image/jpeg">JPEG</SelectItem>
+                      <SelectItem value="image/png">PNG</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </section>
+
+                <section className="flex flex-col gap-4 py-8">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label
+                      htmlFor="quality"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Quality
+                    </label>
+                    <span className="tabular-nums text-sm text-muted-foreground">
+                      {Math.round(quality * 100)}%
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            className={cn(
+                              "min-w-0 flex-1",
+                              isLossless && "cursor-not-allowed opacity-50",
+                            )}
+                          >
+                            <Slider
+                              id="quality"
+                              min={10}
+                              max={100}
+                              step={1}
+                              value={[quality * 100]}
+                              onValueChange={(value) =>
+                                setQuality(value[0] / 100)
+                              }
+                              className={cn(
+                                "w-full cursor-grab",
+                                isLossless && "pointer-events-none",
+                              )}
+                              disabled={isLossless}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        {isLossless && (
+                          <TooltipContent>
+                            <p>Unavailable in lossless mode</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <label
+                        htmlFor="lossless"
+                        className="text-sm text-muted-foreground"
+                      >
+                        Lossless
+                      </label>
+                      <Switch
+                        id="lossless"
+                        checked={isLossless}
+                        onCheckedChange={setIsLossless}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="flex flex-col gap-4 py-8">
+                  <h3 className="text-sm font-medium text-foreground">
+                    Upscale
+                  </h3>
+                  <label htmlFor="upscale-factor" className="sr-only">
+                    Upscale multiplier
+                  </label>
+                  <Select
+                    value={upscaleFactor}
+                    onValueChange={setUpscaleFactor}
+                  >
+                    <SelectTrigger
+                      id="upscale-factor"
+                      className="w-full tabular-nums"
+                    >
+                      <SelectValue placeholder="Multiplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1×</SelectItem>
+                      <SelectItem value="2">2×</SelectItem>
+                      <SelectItem value="3">3×</SelectItem>
+                      <SelectItem value="4">4×</SelectItem>
+                      <SelectItem value="5">5×</SelectItem>
+                      <SelectItem value="6">6×</SelectItem>
+                      <SelectItem value="8">8×</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-pretty text-muted-foreground">
+                    {preserveOriginalDimensions
+                      ? "Scales native pixel dimensions. Canvas smoothing only—not generative upscaling."
+                      : upscaleMultiplier === 1
+                        ? "Output canvas matches your target frame; image is letterboxed as needed."
+                        : "After fitting inside the frame, width and height are multiplied by this value."}
+                  </p>
+                </section>
+
+                <section className="flex flex-col gap-4 pt-8">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <label
+                        htmlFor="preserve-dimensions"
                         className="text-sm font-medium text-foreground"
                       >
-                        Quality
+                        Preserve dimensions
                       </label>
-                      <span className="tabular-nums text-sm text-muted-foreground">
-                        {Math.round(quality * 100)}%
-                      </span>
+                      <p className="mt-1 text-sm text-pretty text-muted-foreground">
+                        Encode only; do not resize to the target frame.
+                      </p>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              className={cn(
-                                "min-w-0 flex-1 py-1",
-                                isLossless && "cursor-not-allowed opacity-50",
-                              )}
-                            >
-                              <Slider
-                                id="quality"
-                                min={10}
-                                max={100}
-                                step={1}
-                                value={[quality * 100]}
-                                onValueChange={(value) =>
-                                  setQuality(value[0] / 100)
-                                }
-                                className={cn(
-                                  "w-full cursor-grab",
-                                  isLossless && "pointer-events-none",
-                                )}
-                                disabled={isLossless}
-                              />
-                            </div>
-                          </TooltipTrigger>
-                          {isLossless && (
-                            <TooltipContent>
-                              <p>Disabled while lossless is on</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <label
-                          htmlFor="lossless"
-                          className="text-sm text-muted-foreground"
-                        >
-                          Lossless
-                        </label>
-                        <Switch
-                          id="lossless"
-                          checked={isLossless}
-                          onCheckedChange={setIsLossless}
-                        />
-                      </div>
-                    </div>
+                    <Switch
+                      id="preserve-dimensions"
+                      checked={preserveOriginalDimensions}
+                      onCheckedChange={setPreserveOriginalDimensions}
+                      className="shrink-0"
+                    />
                   </div>
-
-                  <div className="h-px bg-black/5 dark:bg-white/10" />
-
-                  <div className="flex flex-col gap-3">
-                    <div className="text-sm font-medium text-foreground">
-                      Upscale
-                    </div>
-                    <label htmlFor="upscale-factor" className="sr-only">
-                      Upscale multiplier
-                    </label>
-                    <Select
-                      value={upscaleFactor}
-                      onValueChange={setUpscaleFactor}
-                    >
-                      <SelectTrigger
-                        id="upscale-factor"
-                        className="w-full tabular-nums"
-                      >
-                        <SelectValue placeholder="Upscale" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1× (no upscale)</SelectItem>
-                        <SelectItem value="2">2×</SelectItem>
-                        <SelectItem value="3">3×</SelectItem>
-                        <SelectItem value="4">4×</SelectItem>
-                        <SelectItem value="5">5×</SelectItem>
-                        <SelectItem value="6">6×</SelectItem>
-                        <SelectItem value="8">8×</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-pretty text-muted-foreground">
-                      {preserveOriginalDimensions
-                        ? "Multiplies native width and height (browser interpolation, not AI)."
-                        : upscaleMultiplier === 1
-                          ? "Output matches your target canvas with letterboxing as needed."
-                          : "Scales up the image after fitting inside the target size: output is (fit size × multiplier)."}
-                    </p>
-                  </div>
-
-                  <div className="h-px bg-black/5 dark:bg-white/10" />
-
-                  <div className="flex flex-col gap-4">
-                    <div className="text-sm font-medium text-foreground">
-                      Advanced
-                    </div>
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <label
-                            htmlFor="preserve-dimensions"
-                            className="text-sm font-medium text-foreground"
-                          >
-                            Preserve original dimensions
-                          </label>
-                          <p className="mt-0.5 text-xs text-pretty text-muted-foreground">
-                            Skip resizing; only compress and convert.
-                          </p>
-                        </div>
-                        <Switch
-                          id="preserve-dimensions"
-                          checked={preserveOriginalDimensions}
-                          onCheckedChange={setPreserveOriginalDimensions}
-                          className="shrink-0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                </section>
               </div>
-            </aside>
+            </div>
+          </aside>
 
-            <div className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={cn(
-                  "relative overflow-hidden rounded-2xl bg-card/60 px-6 py-14 text-center ring-1 ring-black/5 transition-[box-shadow,background-color] dark:bg-card/40 dark:ring-white/10 sm:px-10 sm:py-16",
-                  isDragging &&
-                    "bg-primary/5 ring-2 ring-primary/40 dark:bg-primary/10",
-                )}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  name="images"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileChange}
-                  className="sr-only"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.18),transparent)]" />
-                <div className="relative mx-auto flex max-w-md flex-col items-center gap-5">
-                  <span className="flex size-14 items-center justify-center rounded-2xl bg-background/80 shadow-sm ring-1 ring-black/5 dark:bg-background/60 dark:ring-white/10">
-                    <Upload className="size-7 text-primary" aria-hidden />
-                  </span>
-                  <div className="space-y-2">
-                    <p className="text-base font-medium text-foreground sm:text-lg">
-                      Drop images here
-                    </p>
-                    <p className="text-sm text-pretty text-muted-foreground">
-                      Or browse—JPEG, PNG, WebP, and more. Batch processing
-                      supported.
-                    </p>
-                  </div>
+          <div className="flex min-w-0 flex-col gap-8">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cn(
+                "rounded-xl border-2 border-dashed border-foreground/10 bg-muted/25 px-6 py-16 text-center transition-colors sm:px-10 sm:py-20",
+                isDragging && "border-foreground/25 bg-muted/40",
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                name="images"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="sr-only"
+              />
+              <div className="mx-auto flex max-w-sm flex-col items-center gap-6">
+                <div className="flex size-11 items-center justify-center rounded-lg border border-foreground/8 bg-background text-muted-foreground">
+                  <Upload className="size-5" aria-hidden />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <p className="text-base font-medium text-foreground">
+                    Drop files to add
+                  </p>
+                  <p className="text-sm text-pretty text-muted-foreground">
+                    Raster images, batches welcome.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleButtonClick}
+                >
+                  <ImageIcon className="size-4" aria-hidden />
+                  Browse
+                </Button>
+              </div>
+            </div>
+
+            {uploadedImages.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-foreground/6 pt-8">
+                <Button
+                  type="button"
+                  onClick={handleOptimize}
+                  disabled={isOptimizing}
+                >
+                  {isOptimizing ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                      Working…
+                    </>
+                  ) : (
+                    <>
+                      Process{" "}
+                      <span className="tabular-nums">
+                        {uploadedImages.length}
+                      </span>{" "}
+                      {uploadedImages.length === 1 ? "file" : "files"}
+                    </>
+                  )}
+                </Button>
+                {processedImages.length > 0 && (
                   <Button
                     type="button"
                     variant="outline"
-                    size="default"
-                    onClick={handleButtonClick}
-                    className="pointer-events-auto ring-1 ring-black/5 dark:ring-white/10"
+                    onClick={handleDownloadAll}
                   >
-                    <ImageIcon className="size-4" aria-hidden />
-                    Choose files
+                    <Download className="size-4" aria-hidden />
+                    Download all
                   </Button>
-                </div>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  onClick={handleClearAll}
+                >
+                  Clear
+                </Button>
               </div>
+            )}
 
-              {uploadedImages.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    onClick={handleOptimize}
-                    disabled={isOptimizing}
-                    className="shadow-sm"
-                  >
-                    {isOptimizing ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
-                        Optimizing…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="size-4" aria-hidden />
-                        Optimize {uploadedImages.length} image
-                        {uploadedImages.length === 1 ? "" : "s"}
-                      </>
-                    )}
-                  </Button>
-                  {processedImages.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleDownloadAll}
-                      className="ring-1 ring-black/5 dark:ring-white/10"
-                    >
-                      <Download className="size-4" aria-hidden />
-                      Download all
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="text-muted-foreground"
-                    onClick={handleClearAll}
-                  >
-                    Clear queue
-                  </Button>
+            {imageCount > 0 && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-foreground/6 pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {showingProcessed ? "Output" : "Queue"}
+                  </h3>
+                  <p className="tabular-nums text-sm text-muted-foreground">
+                    {imageCount} {imageCount === 1 ? "item" : "items"}
+                  </p>
                 </div>
-              )}
-
-              {imageCount > 0 && (
-                <div>
-                  <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">
-                      {showingProcessed ? "Optimized" : "Ready to process"}
-                    </h3>
-                    <span className="tabular-nums text-sm text-muted-foreground">
-                      {imageCount} file{imageCount === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {gallery.map((image) => (
-                      <li
-                        key={
-                          "dataUrl" in image
-                            ? image.dataUrl.slice(0, 64)
-                            : image.previewUrl
-                        }
-                      >
-                        <Card className="overflow-hidden bg-card/90 ring-1 ring-black/5 dark:bg-card/80 dark:ring-white/10">
-                          <div className="relative aspect-[4/3] bg-muted/30">
-                            {/* biome-ignore lint/performance/noImgElement: blob/data URLs from user files are not suited to next/image */}
-                            <img
-                              src={
+                <ul className="grid list-none grid-cols-1 gap-px bg-foreground/6 p-px sm:grid-cols-2 lg:grid-cols-3">
+                  {gallery.map((image) => (
+                    <li
+                      key={
+                        "dataUrl" in image
+                          ? image.dataUrl.slice(0, 64)
+                          : image.previewUrl
+                      }
+                      className="bg-background"
+                    >
+                      <div className="flex h-full flex-col border border-foreground/6">
+                        <div className="relative aspect-[4/3] bg-muted/40">
+                          {/* biome-ignore lint/performance/noImgElement: blob/data URLs from user files are not suited to next/image */}
+                          <img
+                            src={
+                              "dataUrl" in image
+                                ? image.dataUrl
+                                : image.previewUrl
+                            }
+                            alt=""
+                            className="absolute inset-0 size-full object-contain"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-3 p-4">
+                          <div className="flex min-h-0 flex-col gap-1">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {"fileName" in image
+                                ? image.fileName
+                                : (image as UploadedImage).file.name}
+                            </p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+                              <span className="tabular-nums">
+                                {image.dimensions?.width}×
+                                {image.dimensions?.height}
+                              </span>
+                              <span className="tabular-nums">{image.size}</span>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() =>
+                              handleDownload(
                                 "dataUrl" in image
                                   ? image.dataUrl
-                                  : image.previewUrl
-                              }
-                              alt=""
-                              className="absolute inset-0 size-full object-contain"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-3 p-4">
-                            <div className="flex flex-col gap-1">
-                              <span className="truncate text-sm font-medium text-foreground">
-                                {"fileName" in image
+                                  : image.previewUrl,
+                                "fileName" in image
                                   ? image.fileName
-                                  : (image as UploadedImage).file.name}
-                              </span>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                <span className="tabular-nums">
-                                  {image.dimensions?.width} ×{" "}
-                                  {image.dimensions?.height}px
-                                </span>
-                                <span className="tabular-nums">
-                                  {image.size}
-                                </span>
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="w-full ring-1 ring-black/5 dark:ring-white/10"
-                              onClick={() =>
-                                handleDownload(
-                                  "dataUrl" in image
-                                    ? image.dataUrl
-                                    : image.previewUrl,
-                                  "fileName" in image
-                                    ? image.fileName
-                                    : image.file.name,
-                                )
-                              }
-                            >
-                              <Download className="size-4" aria-hidden />
-                              Download
-                            </Button>
-                          </div>
-                        </Card>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                                  : image.file.name,
+                              )
+                            }
+                          >
+                            <Download className="size-4" aria-hidden />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
