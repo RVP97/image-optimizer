@@ -44,6 +44,48 @@ interface UploadedImage {
 
 type ImageCompressionLibOptions = Parameters<typeof imageCompression>[1];
 
+/** Picker + drag-and-drop: cover common types; extensions catch empty/wrong MIME (e.g. some .jpg exports). */
+const RASTER_IMAGE_ACCEPT =
+  "image/*,.jpg,.jpeg,.jpe,.jfif,.pjpeg,.pjp,.png,.webp,.gif,.bmp,.avif,.ico";
+
+const RASTER_IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "jpe",
+  "jfif",
+  "pjpeg",
+  "pjp",
+  "png",
+  "webp",
+  "gif",
+  "bmp",
+  "avif",
+  "ico",
+]);
+
+function fileExtensionLower(name: string): string | undefined {
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return undefined;
+  return name.slice(dot + 1).toLowerCase();
+}
+
+function isProcessableRasterImageFile(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  const ext = fileExtensionLower(file.name);
+  return ext !== undefined && RASTER_IMAGE_EXTENSIONS.has(ext);
+}
+
+/** MIME → download extension (JPEG uses .jpg, not .jpeg from the subtype string). */
+const OUTPUT_FORMAT_EXTENSION: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+};
+
+function outputFileExtension(mimeType: string): string {
+  return OUTPUT_FORMAT_EXTENSION[mimeType] ?? mimeType.split("/")[1] ?? "bin";
+}
+
 const ImageResizeTool = () => {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
@@ -96,21 +138,23 @@ const ImageResizeTool = () => {
     e.preventDefault();
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      const newImages = await Promise.all(
-        files.map(async (file) => {
-          const dimensions = await getImageDimensions(file);
-          const size = formatFileSize(file.size);
+    const files = Array.from(e.dataTransfer.files).filter(
+      isProcessableRasterImageFile,
+    );
+    if (files.length === 0) return;
 
-          return {
-            file,
-            previewUrl: URL.createObjectURL(file),
-            dimensions,
-            size,
-          };
-        }),
-      );
+    const newImages: UploadedImage[] = [];
+    for (const file of files) {
+      const dimensions = await getImageDimensions(file);
+      if (!dimensions) continue;
+      newImages.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        dimensions,
+        size: formatFileSize(file.size),
+      });
+    }
+    if (newImages.length > 0) {
       setUploadedImages((prev) => [...prev, ...newImages]);
     }
   };
@@ -118,21 +162,24 @@ const ImageResizeTool = () => {
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const files = Array.from(event.target.files || []);
-    const newImages = await Promise.all(
-      files.map(async (file) => {
-        const dimensions = await getImageDimensions(file);
-        const size = formatFileSize(file.size);
-
-        return {
-          file,
-          previewUrl: URL.createObjectURL(file),
-          dimensions,
-          size,
-        };
-      }),
+    const files = Array.from(event.target.files || []).filter(
+      isProcessableRasterImageFile,
     );
-    setUploadedImages((prev) => [...prev, ...newImages]);
+    const newImages: UploadedImage[] = [];
+    for (const file of files) {
+      const dimensions = await getImageDimensions(file);
+      if (!dimensions) continue;
+      newImages.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        dimensions,
+        size: formatFileSize(file.size),
+      });
+    }
+    if (newImages.length > 0) {
+      setUploadedImages((prev) => [...prev, ...newImages]);
+    }
+    event.target.value = "";
   };
 
   const handleOptimize = async () => {
@@ -183,7 +230,7 @@ const ImageResizeTool = () => {
         });
 
         const outBlob = await (await fetch(dataUrl)).blob();
-        const extension = fileFormat.split("/")[1];
+        const extension = outputFileExtension(fileFormat);
 
         return {
           dataUrl,
@@ -325,13 +372,21 @@ const ImageResizeTool = () => {
 
   const getImageDimensions = (
     file: File,
-  ): Promise<{ width: number; height: number }> => {
+  ): Promise<{ width: number; height: number } | null> => {
     return new Promise((resolve) => {
       const img = new Image();
-      img.src = URL.createObjectURL(file);
+      const url = URL.createObjectURL(file);
       img.onload = () => {
-        resolve({ width: img.width, height: img.height });
+        const width = img.naturalWidth;
+        const height = img.naturalHeight;
+        URL.revokeObjectURL(url);
+        resolve(width > 0 && height > 0 ? { width, height } : null);
       };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
     });
   };
 
@@ -382,54 +437,72 @@ const ImageResizeTool = () => {
                   <h3 className="text-sm font-medium text-foreground">
                     Target frame
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-2">
-                      <label
-                        htmlFor="width"
-                        className="text-sm text-muted-foreground"
-                      >
-                        Width
-                      </label>
-                      <Input
-                        id="width"
-                        name="width"
-                        type="number"
-                        inputMode="numeric"
-                        value={width}
-                        onChange={(e) => setWidth(Number(e.target.value))}
-                        min={1}
-                        disabled={preserveOriginalDimensions}
-                        className={cn(
-                          "tabular-nums",
-                          preserveOriginalDimensions && "opacity-50",
-                        )}
-                      />
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <label
+                          htmlFor="width"
+                          className="text-sm text-muted-foreground"
+                        >
+                          Width
+                        </label>
+                        <Input
+                          id="width"
+                          name="width"
+                          type="number"
+                          inputMode="numeric"
+                          value={width}
+                          onChange={(e) => setWidth(Number(e.target.value))}
+                          min={1}
+                          disabled={preserveOriginalDimensions}
+                          className={cn(
+                            "tabular-nums",
+                            preserveOriginalDimensions && "opacity-50",
+                          )}
+                        />
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <label
+                          htmlFor="height"
+                          className="text-sm text-muted-foreground"
+                        >
+                          Height
+                        </label>
+                        <Input
+                          id="height"
+                          name="height"
+                          type="number"
+                          inputMode="numeric"
+                          value={height}
+                          onChange={(e) => setHeight(Number(e.target.value))}
+                          min={1}
+                          disabled={preserveOriginalDimensions}
+                          className={cn(
+                            "tabular-nums",
+                            preserveOriginalDimensions && "opacity-50",
+                          )}
+                        />
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-4 border-t border-foreground/6 pt-4">
                       <label
-                        htmlFor="height"
-                        className="text-sm text-muted-foreground"
+                        htmlFor="preserve-dimensions"
+                        className="text-sm font-medium text-foreground"
                       >
-                        Height
+                        Preserve dimensions
                       </label>
-                      <Input
-                        id="height"
-                        name="height"
-                        type="number"
-                        inputMode="numeric"
-                        value={height}
-                        onChange={(e) => setHeight(Number(e.target.value))}
-                        min={1}
-                        disabled={preserveOriginalDimensions}
-                        className={cn(
-                          "tabular-nums",
-                          preserveOriginalDimensions && "opacity-50",
-                        )}
+                      <Switch
+                        id="preserve-dimensions"
+                        checked={preserveOriginalDimensions}
+                        onCheckedChange={setPreserveOriginalDimensions}
+                        className="shrink-0"
                       />
                     </div>
                   </div>
                   <p className="text-sm text-pretty text-muted-foreground">
-                    Pixels. Ignored when preserve dimensions is on.
+                    Pixels. With preserve off, output fits inside the frame.
+                    With preserve on, width and height are ignored—encode at
+                    native size.
                   </p>
                 </section>
 
@@ -445,9 +518,9 @@ const ImageResizeTool = () => {
                       <SelectValue placeholder="Format" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="image/webp">WebP</SelectItem>
-                      <SelectItem value="image/jpeg">JPEG</SelectItem>
-                      <SelectItem value="image/png">PNG</SelectItem>
+                      <SelectItem value="image/webp">WebP (.webp)</SelectItem>
+                      <SelectItem value="image/jpeg">JPEG (.jpg)</SelectItem>
+                      <SelectItem value="image/png">PNG (.png)</SelectItem>
                     </SelectContent>
                   </Select>
                 </section>
@@ -549,28 +622,6 @@ const ImageResizeTool = () => {
                         : "After fitting inside the frame, width and height are multiplied by this value."}
                   </p>
                 </section>
-
-                <section className="flex flex-col gap-4 pt-8">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <label
-                        htmlFor="preserve-dimensions"
-                        className="text-sm font-medium text-foreground"
-                      >
-                        Preserve dimensions
-                      </label>
-                      <p className="mt-1 text-sm text-pretty text-muted-foreground">
-                        Encode only; do not resize to the target frame.
-                      </p>
-                    </div>
-                    <Switch
-                      id="preserve-dimensions"
-                      checked={preserveOriginalDimensions}
-                      onCheckedChange={setPreserveOriginalDimensions}
-                      className="shrink-0"
-                    />
-                  </div>
-                </section>
               </div>
             </div>
           </aside>
@@ -589,7 +640,7 @@ const ImageResizeTool = () => {
                 ref={fileInputRef}
                 type="file"
                 name="images"
-                accept="image/*"
+                accept={RASTER_IMAGE_ACCEPT}
                 multiple
                 onChange={handleFileChange}
                 className="sr-only"
@@ -603,7 +654,7 @@ const ImageResizeTool = () => {
                     Drop files to add
                   </p>
                   <p className="text-sm text-pretty text-muted-foreground">
-                    Raster images, batches welcome.
+                    JPEG, PNG, WebP, GIF, AVIF, BMP, ICO—batches welcome.
                   </p>
                 </div>
                 <Button
