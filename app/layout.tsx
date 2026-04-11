@@ -14,8 +14,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Image Compressor",
-  description: "Compress your images to save space",
+  title: "Image optimizer — private, in-browser",
+  description:
+    "Resize, convert, and compress images locally. WebP, JPEG, PNG. Nothing leaves your device.",
 };
 
 export default function RootLayout({

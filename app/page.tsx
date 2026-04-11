@@ -1,5 +1,15 @@
 "use client";
 
+import imageCompression from "browser-image-compression";
+import {
+  Download,
+  ImageIcon,
+  Loader2,
+  SlidersHorizontal,
+  Sparkles,
+  Upload,
+} from "lucide-react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,9 +29,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import imageCompression from "browser-image-compression";
-import { Download } from "lucide-react";
-import { useRef, useState } from "react";
 
 interface ProcessedImage {
   dataUrl: string;
@@ -43,15 +50,7 @@ interface UploadedImage {
   size: string;
 }
 
-interface CompressionOptions {
-  maxWidthOrHeight: number;
-  useWebWorker: true;
-  initialQuality: number;
-  fileType: string;
-  options: {
-    lossless: boolean;
-  };
-}
+type ImageCompressionLibOptions = Parameters<typeof imageCompression>[1];
 
 const ImageResizeTool = () => {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -63,10 +62,32 @@ const ImageResizeTool = () => {
   const [quality, setQuality] = useState<number>(0.9);
   const [isLossless, setIsLossless] = useState(false);
   const [fileFormat, setFileFormat] = useState<string>("image/webp");
+  const [preserveOriginalDimensions, setPreserveOriginalDimensions] =
+    useState(false);
+  /** Integer >= 1; applied on canvas after fit-to-target (or on native size if preserve). */
+  const [upscaleFactor, setUpscaleFactor] = useState<string>("1");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const upscaleMultiplier = Math.max(
+    1,
+    Math.min(16, Number.parseInt(upscaleFactor, 10) || 1),
+  );
+
+  const formatFileSize = (bytes: number) =>
+    bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
   const handleButtonClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleClearAll = () => {
+    for (const img of uploadedImages) {
+      URL.revokeObjectURL(img.previewUrl);
+    }
+    setUploadedImages([]);
+    setProcessedImages([]);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -88,10 +109,7 @@ const ImageResizeTool = () => {
       const newImages = await Promise.all(
         files.map(async (file) => {
           const dimensions = await getImageDimensions(file);
-          const size =
-            file.size < 1024 * 1024
-              ? `${(file.size / 1024).toFixed(1)} KB`
-              : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+          const size = formatFileSize(file.size);
 
           return {
             file,
@@ -99,23 +117,20 @@ const ImageResizeTool = () => {
             dimensions,
             size,
           };
-        })
+        }),
       );
       setUploadedImages((prev) => [...prev, ...newImages]);
     }
   };
 
   const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = Array.from(event.target.files || []);
     const newImages = await Promise.all(
       files.map(async (file) => {
         const dimensions = await getImageDimensions(file);
-        const size =
-          file.size < 1024 * 1024
-            ? `${(file.size / 1024).toFixed(1)} KB`
-            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+        const size = formatFileSize(file.size);
 
         return {
           file,
@@ -123,7 +138,7 @@ const ImageResizeTool = () => {
           dimensions,
           size,
         };
-      })
+      }),
     );
     setUploadedImages((prev) => [...prev, ...newImages]);
   };
@@ -133,82 +148,178 @@ const ImageResizeTool = () => {
 
     const optimizedImages = await Promise.all(
       uploadedImages.map(async ({ file }) => {
-        const options: CompressionOptions = {
-          maxWidthOrHeight: Math.max(width, height),
-          useWebWorker: true,
+        const baseOpts = {
+          useWebWorker: true as const,
           initialQuality: isLossless ? 1 : quality,
           fileType: fileFormat,
           options: {
             lossless: isLossless,
           },
         };
-        const compressedFile = await imageCompression(file, options);
-        const dataUrl = await toDataUrlWebp(compressedFile);
 
+        const maxEdge = Math.max(
+          width,
+          height,
+          width * upscaleMultiplier,
+          height * upscaleMultiplier,
+        );
+
+        const options: ImageCompressionLibOptions = preserveOriginalDimensions
+          ? {
+              ...baseOpts,
+              alwaysKeepResolution: true,
+              maxSizeMB: Number.POSITIVE_INFINITY,
+            }
+          : {
+              ...baseOpts,
+              maxWidthOrHeight: maxEdge,
+            };
+
+        const compressedFile = await imageCompression(file, options);
+        const {
+          dataUrl,
+          width: outW,
+          height: outH,
+        } = await blobToDataUrl(compressedFile, {
+          targetWidth: width,
+          targetHeight: height,
+          preserveOriginal: preserveOriginalDimensions,
+          upscaleMultiplier,
+          mimeType: fileFormat,
+          quality,
+          lossless: isLossless,
+        });
+
+        const outBlob = await (await fetch(dataUrl)).blob();
         const extension = fileFormat.split("/")[1];
 
         return {
           dataUrl,
-          fileName: file.name.replace(/\.[^/.]+$/, "") + "." + extension,
-          dimensions: { width, height },
-          size:
-            compressedFile.size < 1024 * 1024
-              ? `${(compressedFile.size / 1024).toFixed(1)} KB`
-              : `${(compressedFile.size / (1024 * 1024)).toFixed(1)} MB`,
+          fileName: `${file.name.replace(/\.[^/.]+$/, "")}.${extension}`,
+          dimensions: { width: outW, height: outH },
+          size: formatFileSize(outBlob.size),
         };
-      })
+      }),
     );
 
     setProcessedImages(optimizedImages);
     setIsOptimizing(false);
   };
 
-  const toDataUrlWebp = async (file: Blob | MediaSource) => {
-    const img = document.createElement("img");
-    img.src = URL.createObjectURL(file);
+  const blobToDataUrl = async (
+    file: Blob,
+    params: {
+      targetWidth: number;
+      targetHeight: number;
+      preserveOriginal: boolean;
+      upscaleMultiplier: number;
+      mimeType: string;
+      quality: number;
+      lossless: boolean;
+    },
+  ): Promise<{ dataUrl: string; width: number; height: number }> => {
+    const {
+      targetWidth,
+      targetHeight,
+      preserveOriginal,
+      upscaleMultiplier: m,
+      mimeType,
+      quality: q,
+      lossless,
+    } = params;
 
-    await new Promise((resolve) => {
-      img.onload = resolve;
+    const img = document.createElement("img");
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image"));
     });
+
+    URL.revokeObjectURL(objectUrl);
+
+    const imgW = img.naturalWidth;
+    const imgH = img.naturalHeight;
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-
-    canvas.width = width;
-    canvas.height = height;
-
-    // Calculate scaling to maintain aspect ratio
-    const originalRatio = img.width / img.height;
-    const targetRatio = width / height;
-
-    let drawWidth = width;
-    let drawHeight = height;
-
-    if (originalRatio > targetRatio) {
-      // Image is wider than target
-      drawWidth = height * originalRatio;
-      drawHeight = height;
-    } else {
-      // Image is taller than target
-      drawWidth = width;
-      drawHeight = width / originalRatio;
+    if (!ctx) {
+      throw new Error("Canvas 2D context unavailable");
     }
 
-    // Center the image
-    const x = (width - drawWidth) / 2;
-    const y = (height - drawHeight) / 2;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
-    if (ctx) {
+    if (preserveOriginal) {
+      const outW = Math.round(imgW * m);
+      const outH = Math.round(imgH * m);
+      canvas.width = outW;
+      canvas.height = outH;
+      if (mimeType === "image/jpeg") {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, outW, outH);
+      }
+      ctx.drawImage(img, 0, 0, outW, outH);
+      const dataUrl = encodeCanvasToDataUrl(canvas, mimeType, q, lossless);
+      return { dataUrl, width: outW, height: outH };
+    }
+
+    const scaleContain = Math.min(targetWidth / imgW, targetHeight / imgH);
+
+    if (m === 1) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
       ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+      const drawWidth = imgW * scaleContain;
+      const drawHeight = imgH * scaleContain;
+      const x = (targetWidth - drawWidth) / 2;
+      const y = (targetHeight - drawHeight) / 2;
 
       ctx.drawImage(img, x, y, drawWidth, drawHeight);
+
+      const dataUrl = encodeCanvasToDataUrl(canvas, mimeType, q, lossless);
+      return { dataUrl, width: targetWidth, height: targetHeight };
     }
 
-    return canvas.toDataURL("image/webp", {
-      quality: isLossless ? 1 : quality,
-      lossless: isLossless,
-    });
+    const fitW = imgW * scaleContain;
+    const fitH = imgH * scaleContain;
+    const outW = Math.round(fitW * m);
+    const outH = Math.round(fitH * m);
+
+    canvas.width = outW;
+    canvas.height = outH;
+
+    if (mimeType === "image/jpeg") {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, outW, outH);
+    }
+
+    ctx.drawImage(img, 0, 0, outW, outH);
+
+    const dataUrl = encodeCanvasToDataUrl(canvas, mimeType, q, lossless);
+    return { dataUrl, width: outW, height: outH };
+  };
+
+  const encodeCanvasToDataUrl = (
+    canvas: HTMLCanvasElement,
+    mimeType: string,
+    q: number,
+    lossless: boolean,
+  ): string => {
+    if (mimeType === "image/webp") {
+      return canvas.toDataURL(mimeType, {
+        quality: lossless ? 1 : q,
+        lossless,
+      } as unknown as number);
+    }
+    if (mimeType === "image/jpeg") {
+      return canvas.toDataURL(mimeType, lossless ? 1 : q);
+    }
+    return canvas.toDataURL(mimeType);
   };
 
   const handleDownload = (dataUrl: string, fileName: string) => {
@@ -221,7 +332,7 @@ const ImageResizeTool = () => {
   };
 
   const getImageDimensions = (
-    file: File
+    file: File,
   ): Promise<{ width: number; height: number }> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -234,189 +345,429 @@ const ImageResizeTool = () => {
 
   const handleDownloadAll = () => {
     processedImages.forEach((image) => {
-      // Add small delay between downloads to prevent browser blocking
       setTimeout(() => {
         handleDownload(image.dataUrl, image.fileName);
       }, 100);
     });
   };
 
+  const showingProcessed = processedImages.length > 0;
+  const gallery = showingProcessed ? processedImages : uploadedImages;
+  const imageCount = gallery.length;
+
   return (
-    <div className="container mx-auto py-10 space-y-6">
-      <Card className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Upload and Resize Images</h2>
-
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1 space-y-2">
-            <label htmlFor="width" className="text-sm font-medium">
-              Width (px)
-            </label>
-            <Input
-              id="width"
-              type="number"
-              value={width}
-              onChange={(e) => setWidth(Number(e.target.value))}
-              min="1"
-            />
-          </div>
-          <div className="flex-1 space-y-2">
-            <label htmlFor="height" className="text-sm font-medium">
-              Height (px)
-            </label>
-            <Input
-              id="height"
-              type="number"
-              value={height}
-              onChange={(e) => setHeight(Number(e.target.value))}
-              min="1"
-            />
-          </div>
-          <div className="flex-1 space-y-2">
-            <label className="text-sm font-medium">Format</label>
-            <Select value={fileFormat} onValueChange={setFileFormat}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select format" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="image/webp">WebP</SelectItem>
-                <SelectItem value="image/jpeg">JPEG</SelectItem>
-                <SelectItem value="image/png">PNG</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 space-y-2">
-            <div className="flex justify-between items-center">
-              <label htmlFor="quality" className="text-sm font-medium">
-                Quality ({Math.round(quality * 100)}%)
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">Lossless</label>
-                <Switch checked={isLossless} onCheckedChange={setIsLossless} />
-              </div>
+    <main className="isolate min-h-dvh bg-linear-to-b from-zinc-100 via-background to-background dark:from-zinc-950 dark:via-background dark:to-background">
+      <div className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
+        <div className="mx-auto max-w-6xl">
+          <header className="mb-10 lg:mb-14">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary ring-1 ring-primary/15">
+                <Sparkles className="size-3.5" aria-hidden />
+                Runs in your browser
+              </span>
             </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={cn(
-                      isLossless && "cursor-not-allowed opacity-50"
-                    )}
-                  >
-                    <Slider
-                      id="quality"
-                      min={10}
-                      max={100}
-                      step={1}
-                      value={[quality * 100]}
-                      onValueChange={(value) => setQuality(value[0] / 100)}
-                      className={cn(
-                        "py-4 cursor-grab",
-                        isLossless && "pointer-events-none"
-                      )}
-                      disabled={isLossless}
-                    />
-                  </div>
-                </TooltipTrigger>
-                {isLossless && (
-                  <TooltipContent>
-                    <p>Quality slider is disabled in lossless mode</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </div>
-
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={cn(
-            "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
-            isDragging
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25"
-          )}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <div className="space-y-4">
-            <p className="text-muted-foreground">
-              Drag and drop your images here, or
+            <h1 className="mt-5 max-w-[35ch] text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+              Compress images without uploading them
+            </h1>
+            <p className="mt-4 max-w-[56ch] text-base text-pretty text-muted-foreground sm:text-lg">
+              Resize, convert, and shrink files locally. Pick a format, tune
+              quality, and download—nothing leaves your device.
             </p>
-            <Button onClick={handleButtonClick}>Choose Images</Button>
-          </div>
-        </div>
+          </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
-          {uploadedImages.length > 0 && (
-            <div className="col-span-full mb-4 flex gap-4">
-              <Button onClick={handleOptimize} disabled={isOptimizing}>
-                {isOptimizing ? "Optimizing..." : "Optimize Images"}
-              </Button>
-              {processedImages.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleDownloadAll}
-                  className="flex gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download All
-                </Button>
+          <div className="grid gap-8 lg:grid-cols-12 lg:items-start lg:gap-10">
+            <aside className="flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
+              <div className="rounded-2xl bg-card/90 p-6 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-card/80 dark:ring-white/10">
+                <div className="flex items-center gap-2 text-foreground">
+                  <SlidersHorizontal
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <h2 className="text-base font-semibold">Output settings</h2>
+                </div>
+                <p className="mt-1 text-sm text-pretty text-muted-foreground">
+                  These apply to every image in your batch.
+                </p>
+
+                <div className="mt-6 flex flex-col gap-8">
+                  <div className="flex flex-col gap-3">
+                    <div className="text-sm font-medium text-foreground">
+                      Canvas size
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <label
+                          htmlFor="width"
+                          className="text-sm text-muted-foreground"
+                        >
+                          Width
+                        </label>
+                        <Input
+                          id="width"
+                          name="width"
+                          type="number"
+                          inputMode="numeric"
+                          value={width}
+                          onChange={(e) => setWidth(Number(e.target.value))}
+                          min={1}
+                          disabled={preserveOriginalDimensions}
+                          className={cn(
+                            "tabular-nums",
+                            preserveOriginalDimensions && "opacity-60",
+                          )}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label
+                          htmlFor="height"
+                          className="text-sm text-muted-foreground"
+                        >
+                          Height
+                        </label>
+                        <Input
+                          id="height"
+                          name="height"
+                          type="number"
+                          inputMode="numeric"
+                          value={height}
+                          onChange={(e) => setHeight(Number(e.target.value))}
+                          min={1}
+                          disabled={preserveOriginalDimensions}
+                          className={cn(
+                            "tabular-nums",
+                            preserveOriginalDimensions && "opacity-60",
+                          )}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-pretty text-muted-foreground">
+                      Used when preserve original size is off. Units are pixels.
+                    </p>
+                  </div>
+
+                  <div className="h-px bg-black/5 dark:bg-white/10" />
+
+                  <div className="flex flex-col gap-3">
+                    <div className="text-sm font-medium text-foreground">
+                      File format
+                    </div>
+                    <label htmlFor="file-format" className="sr-only">
+                      Output format
+                    </label>
+                    <Select value={fileFormat} onValueChange={setFileFormat}>
+                      <SelectTrigger id="file-format" className="w-full">
+                        <SelectValue placeholder="Select format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="image/webp">WebP</SelectItem>
+                        <SelectItem value="image/jpeg">JPEG</SelectItem>
+                        <SelectItem value="image/png">PNG</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label
+                        htmlFor="quality"
+                        className="text-sm font-medium text-foreground"
+                      >
+                        Quality
+                      </label>
+                      <span className="tabular-nums text-sm text-muted-foreground">
+                        {Math.round(quality * 100)}%
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={cn(
+                                "min-w-0 flex-1 py-1",
+                                isLossless && "cursor-not-allowed opacity-50",
+                              )}
+                            >
+                              <Slider
+                                id="quality"
+                                min={10}
+                                max={100}
+                                step={1}
+                                value={[quality * 100]}
+                                onValueChange={(value) =>
+                                  setQuality(value[0] / 100)
+                                }
+                                className={cn(
+                                  "w-full cursor-grab",
+                                  isLossless && "pointer-events-none",
+                                )}
+                                disabled={isLossless}
+                              />
+                            </div>
+                          </TooltipTrigger>
+                          {isLossless && (
+                            <TooltipContent>
+                              <p>Disabled while lossless is on</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <label
+                          htmlFor="lossless"
+                          className="text-sm text-muted-foreground"
+                        >
+                          Lossless
+                        </label>
+                        <Switch
+                          id="lossless"
+                          checked={isLossless}
+                          onCheckedChange={setIsLossless}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-black/5 dark:bg-white/10" />
+
+                  <div className="flex flex-col gap-3">
+                    <div className="text-sm font-medium text-foreground">
+                      Upscale
+                    </div>
+                    <label htmlFor="upscale-factor" className="sr-only">
+                      Upscale multiplier
+                    </label>
+                    <Select
+                      value={upscaleFactor}
+                      onValueChange={setUpscaleFactor}
+                    >
+                      <SelectTrigger
+                        id="upscale-factor"
+                        className="w-full tabular-nums"
+                      >
+                        <SelectValue placeholder="Upscale" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1× (no upscale)</SelectItem>
+                        <SelectItem value="2">2×</SelectItem>
+                        <SelectItem value="3">3×</SelectItem>
+                        <SelectItem value="4">4×</SelectItem>
+                        <SelectItem value="5">5×</SelectItem>
+                        <SelectItem value="6">6×</SelectItem>
+                        <SelectItem value="8">8×</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-pretty text-muted-foreground">
+                      {preserveOriginalDimensions
+                        ? "Multiplies native width and height (browser interpolation, not AI)."
+                        : upscaleMultiplier === 1
+                          ? "Output matches your target canvas with letterboxing as needed."
+                          : "Scales up the image after fitting inside the target size: output is (fit size × multiplier)."}
+                    </p>
+                  </div>
+
+                  <div className="h-px bg-black/5 dark:bg-white/10" />
+
+                  <div className="flex flex-col gap-4">
+                    <div className="text-sm font-medium text-foreground">
+                      Advanced
+                    </div>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <label
+                            htmlFor="preserve-dimensions"
+                            className="text-sm font-medium text-foreground"
+                          >
+                            Preserve original dimensions
+                          </label>
+                          <p className="mt-0.5 text-xs text-pretty text-muted-foreground">
+                            Skip resizing; only compress and convert.
+                          </p>
+                        </div>
+                        <Switch
+                          id="preserve-dimensions"
+                          checked={preserveOriginalDimensions}
+                          onCheckedChange={setPreserveOriginalDimensions}
+                          className="shrink-0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <div className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={cn(
+                  "relative overflow-hidden rounded-2xl bg-card/60 px-6 py-14 text-center ring-1 ring-black/5 transition-[box-shadow,background-color] dark:bg-card/40 dark:ring-white/10 sm:px-10 sm:py-16",
+                  isDragging &&
+                    "bg-primary/5 ring-2 ring-primary/40 dark:bg-primary/10",
+                )}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  name="images"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.18),transparent)]" />
+                <div className="relative mx-auto flex max-w-md flex-col items-center gap-5">
+                  <span className="flex size-14 items-center justify-center rounded-2xl bg-background/80 shadow-sm ring-1 ring-black/5 dark:bg-background/60 dark:ring-white/10">
+                    <Upload className="size-7 text-primary" aria-hidden />
+                  </span>
+                  <div className="space-y-2">
+                    <p className="text-base font-medium text-foreground sm:text-lg">
+                      Drop images here
+                    </p>
+                    <p className="text-sm text-pretty text-muted-foreground">
+                      Or browse—JPEG, PNG, WebP, and more. Batch processing
+                      supported.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    onClick={handleButtonClick}
+                    className="pointer-events-auto ring-1 ring-black/5 dark:ring-white/10"
+                  >
+                    <ImageIcon className="size-4" aria-hidden />
+                    Choose files
+                  </Button>
+                </div>
+              </div>
+
+              {uploadedImages.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    onClick={handleOptimize}
+                    disabled={isOptimizing}
+                    className="shadow-sm"
+                  >
+                    {isOptimizing ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        Optimizing…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-4" aria-hidden />
+                        Optimize {uploadedImages.length} image
+                        {uploadedImages.length === 1 ? "" : "s"}
+                      </>
+                    )}
+                  </Button>
+                  {processedImages.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleDownloadAll}
+                      className="ring-1 ring-black/5 dark:ring-white/10"
+                    >
+                      <Download className="size-4" aria-hidden />
+                      Download all
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={handleClearAll}
+                  >
+                    Clear queue
+                  </Button>
+                </div>
+              )}
+
+              {imageCount > 0 && (
+                <div>
+                  <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {showingProcessed ? "Optimized" : "Ready to process"}
+                    </h3>
+                    <span className="tabular-nums text-sm text-muted-foreground">
+                      {imageCount} file{imageCount === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {gallery.map((image) => (
+                      <li
+                        key={
+                          "dataUrl" in image
+                            ? image.dataUrl.slice(0, 64)
+                            : image.previewUrl
+                        }
+                      >
+                        <Card className="overflow-hidden bg-card/90 ring-1 ring-black/5 dark:bg-card/80 dark:ring-white/10">
+                          <div className="relative aspect-[4/3] bg-muted/30">
+                            {/* biome-ignore lint/performance/noImgElement: blob/data URLs from user files are not suited to next/image */}
+                            <img
+                              src={
+                                "dataUrl" in image
+                                  ? image.dataUrl
+                                  : image.previewUrl
+                              }
+                              alt=""
+                              className="absolute inset-0 size-full object-contain"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-3 p-4">
+                            <div className="flex flex-col gap-1">
+                              <span className="truncate text-sm font-medium text-foreground">
+                                {"fileName" in image
+                                  ? image.fileName
+                                  : (image as UploadedImage).file.name}
+                              </span>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <span className="tabular-nums">
+                                  {image.dimensions?.width} ×{" "}
+                                  {image.dimensions?.height}px
+                                </span>
+                                <span className="tabular-nums">
+                                  {image.size}
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full ring-1 ring-black/5 dark:ring-white/10"
+                              onClick={() =>
+                                handleDownload(
+                                  "dataUrl" in image
+                                    ? image.dataUrl
+                                    : image.previewUrl,
+                                  "fileName" in image
+                                    ? image.fileName
+                                    : image.file.name,
+                                )
+                              }
+                            >
+                              <Download className="size-4" aria-hidden />
+                              Download
+                            </Button>
+                          </div>
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
-          )}
-
-          {(processedImages.length > 0 ? processedImages : uploadedImages).map(
-            (image, index) => (
-              <Card key={index} className="p-4 space-y-3">
-                <div className="relative w-full pt-[56.25%]">
-                  <img
-                    src={"dataUrl" in image ? image.dataUrl : image.previewUrl}
-                    alt="Image"
-                    className="absolute inset-0 w-full h-full object-contain bg-gray-50 rounded-md"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span className="truncate">
-                      {"fileName" in image
-                        ? image.fileName
-                        : (image as UploadedImage).file.name}
-                    </span>
-                    <span>{image.size}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">
-                      {image.dimensions?.width} × {image.dimensions?.height}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        handleDownload(
-                          "dataUrl" in image ? image.dataUrl : image.previewUrl,
-                          "fileName" in image ? image.fileName : image.file.name
-                        )
-                      }
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )
-          )}
+          </div>
         </div>
-      </Card>
-    </div>
+      </div>
+    </main>
   );
 };
 
